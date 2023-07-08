@@ -85,8 +85,8 @@ class ASLTransformerEncoderLayer(nn.Module):
         self.act = nn.ReLU()
         self.norm2 = nn.LayerNorm(d_model)
 
-    def forward(self, x):
-        x = self.norm1(x + self.self_attn(x, x, x))
+    def forward(self, q, k):
+        x = self.norm1(q + self.self_attn(q, k, k))
         x = self.norm2(x + self.ff2(self.act(self.ff1(x))))
         return x
     
@@ -98,16 +98,16 @@ class ASLTransformerEncoder(nn.Module):
             layers.append(ASLTransformerEncoderLayer(d_model, n_head, d_ff))
         self.layers = nn.Sequential(*layers)
 
-    def forward(self, x):
+    def forward(self, q, x):
         for layer in self.layers:
-            x = layer(x)
+            x = layer(q, x)
         return x
 
 class ASLTransformerDecoderLayer(nn.Module):
     def __init__(self, d_model, n_head, d_ff):
         super().__init__()
-        self.self_attn = MultiheadAttention(d_model, n_head)
-        self.norm1 = nn.LayerNorm(d_model)
+        # self.self_attn = MultiheadAttention(d_model, n_head)
+        # self.norm1 = nn.LayerNorm(d_model)
 
         self.en_dec_attn = MultiheadAttention(d_model, n_head)
         self.norm2 = nn.LayerNorm(d_model)
@@ -118,7 +118,7 @@ class ASLTransformerDecoderLayer(nn.Module):
         self.norm3 = nn.LayerNorm(d_model)
 
     def forward(self, x, k, v, attn_mask=None):
-        x = self.norm1(x + self.self_attn(x, x, x, attn_mask))
+        # x = self.norm1(x + self.self_attn(x, x, x, attn_mask))
         x = self.norm2(x + self.en_dec_attn(x, k, v))
         x = self.norm3(x + self.ff2(self.act(self.ff1(x))))
         return x
@@ -127,7 +127,7 @@ class ConstantInput(nn.Module):
     def __init__(self, y_dim, d_model):
         super().__init__()
 
-        self.input = nn.Parameter(torch.randn(1, y_dim, d_model))
+        self.input = nn.Parameter(torch.zeros(1, y_dim, d_model))
 
     def forward(self, x):
         batch = x.shape[0]
@@ -143,25 +143,23 @@ class ASLTransformerDecoder(nn.Module):
             layers.append(ASLTransformerDecoderLayer(d_model, n_head, d_ff))
         self.layers = nn.Sequential(*layers)
 
-    def forward(self, x, r, attn_mask=None):
+    def forward(self, n, r, attn_mask=None):
         for layer in self.layers:
             x = layer(x, r, r, attn_mask)
         return x
-
+    
 class ASLTransformer(nn.Module):
-    def __init__(self, y_dim, y_len, d_model, n_head, n_enc_layers, n_dec_layers, d_ff):
+    def __init__(self, y_len, y_dim, d_model, n_head, n_enc_layers, d_ff):
         super().__init__()
-        self.constant = ConstantInput(y_len, d_model)
+        self.query = ConstantInput(y_len, d_model)
+        self.pos_enc = PositionalEncoding(d_model)
         self.encoder = ASLTransformerEncoder(d_model, n_head, n_enc_layers, d_ff)
-        self.decoder = ASLTransformerDecoder(d_model, n_head, n_dec_layers, d_ff)
-        self.fc_out = nn.Linear(d_model, y_dim)
+        self.fc_dim = nn.Linear(d_model, y_dim)
 
-    def forward(self, x, attn_mask=None):
-        out_lst = self.encoder(x)
-        c = self.constant(x)
-        out = self.decoder(c, out_lst, attn_mask)
-        out = self.fc_out(out)
-        out = F.softmax(out, dim=-1)
+    def forward(self, x):
+        q = self.pos_enc(self.query(x)) # b, y_l, d_model
+        out = self.encoder(q, x) # b, y_l, d_model
+        out = self.fc_dim(out) # b, y_l, y_dim 
         return out
 
     @staticmethod
@@ -172,16 +170,16 @@ class ASLTransformer(nn.Module):
 
 if __name__ == "__main__":
     model = ASLTransformer(
-        y_dim=62, y_len=64, d_model=152, n_head=8, n_enc_layers=6, n_dec_layers=1, d_ff=512
+        y_dim=61, y_len=64, d_model=152, n_head=8, n_enc_layers=6, d_ff=512
     ).to('cuda')
 
     # batch_size, seq_len, d_model
     x = torch.randn(16, 512, 152, device='cuda')
-    y = torch.randint(low=0, high=62, size=(16, 64), device='cuda')
+    y = torch.randint(low=0, high=61, size=(16, 64), device='cuda')
     
     print_tensor(x, desc='x')
     print_tensor(y, desc='y')
 
-    out = model(x, y)
+    out = model(x)
 
     print_tensor(out, desc='out')

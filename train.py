@@ -26,20 +26,20 @@ def to_phrase(dic, index_lst):
     ret = ""
     for val in index_lst:
         val = val.item()
-        if val < 3:
+        if val < 2:
             pass
         else:
             ret += dic[val]
     return ret
 
-def calculate_eval_val(x, y, iw2):
-    x = x.cpu()
-    y = y.cpu()
+def calculate_eval_val(out, gt, iw2):
+    out = out.cpu()
+    gt = gt.cpu()
     ld_val = 0
     word_cnt = 0
-    for i in range(x.size(0)):
-        gt_phrase = to_phrase(iw2, x[i])
-        out_phrase = to_phrase(iw2, y[i])
+    for i in range(out.size(0)):
+        gt_phrase = to_phrase(iw2, gt[i])
+        out_phrase = to_phrase(iw2, out[i])
         levenshtein_distance = distance(out_phrase, gt_phrase)
         ld_val += levenshtein_distance
         word_cnt += len(gt_phrase)
@@ -62,7 +62,7 @@ def train(
     train_loader = sample_data(train_loader)
     val_loader = sample_data(val_loader)
 
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss(label_smoothing=-0.1, ignore_index=0)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     pbar = tqdm.trange(args.steps, dynamic_ncols=True, initial=args.start_step)
@@ -89,17 +89,21 @@ def train(
         with torch.no_grad():
             phrase = phrase.cpu()
             out = torch.argmax(out.cpu(), dim=-1)
+            phrase[phrase==1] = 0
+            out[out==1] = 0
             train_accuracy = torch.sum(phrase==out)/(phrase.size(0)*phrase.size(1))
-            train_eval = calculate_eval_val(phrase, out, args.iw2)
+            train_eval = calculate_eval_val(out, phrase, args.iw2)
 
             model.eval()
-            val_kps, gt = next(val_loader)
+            val_kps, val_gt = next(val_loader)
             val_kps = val_kps.to(device)
 
             val_out = model(val_kps)
             val_out = torch.argmax(val_out.cpu(), dim=-1)
-            val_accuracy = torch.sum(gt==val_out)/(gt.size(0)*gt.size(1))
-            val_eval = calculate_eval_val(gt, val_out, args.iw2)
+            val_gt[val_gt==1] = 0
+            val_out[val_out==1] = 0
+            val_accuracy = torch.sum(val_gt==val_out)/(val_gt.size(0)*val_gt.size(1))
+            val_eval = calculate_eval_val(val_out, val_gt, args.iw2)
 
             pbar.set_description(
                 f"loss:{loss.item():.4f} " + 
@@ -132,7 +136,7 @@ if __name__ == "__main__":
     argparser = argparse.ArgumentParser()
 
     argparser.add_argument("--id", required=True)
-    argparser.add_argument("--batch_size", default=128, type=int)
+    argparser.add_argument("--batch_size", default=64, type=int)
     argparser.add_argument("--val_batch_size", default=32, type=int)
     argparser.add_argument("--lr", default=0.001, type=float)
     argparser.add_argument("--resume", action="store_true")
@@ -152,19 +156,23 @@ if __name__ == "__main__":
 
     iw2 = dict()
     iw2[0] = ""
-    iw2[1] = "<sos>"
-    iw2[2] = "<eos>"
+    iw2[1] = "<eos>"
     for k, v in w2i.items():
-        iw2[v+3] = k
+        iw2[v+2] = k
     args.iw2 = iw2
 
     # id
     os.makedirs(f"checkpoints/{args.id}", exist_ok=True)
 
     # model
+    # model = ASLTransformer(
+    #     y_dim=61, y_len=64, d_model=152, n_head=8, n_enc_layers=6, n_dec_layers=6, d_ff=512
+    # ).to(device)
+
     model = ASLTransformer(
-        y_dim=62, y_len=64, d_model=152, n_head=8, n_enc_layers=6, n_dec_layers=1, d_ff=512
+        y_dim=61, y_len=64, d_model=152, n_head=8, n_enc_layers=12, d_ff=1024
     ).to(device)
+
     if args.load:
         ckpt = torch.load(args.load, map_location=device)
         model.load_state_dict(ckpt['model'])

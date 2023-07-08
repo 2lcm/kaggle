@@ -49,10 +49,10 @@ class ASLDataset(Dataset):
         kps = F.pad(kps, (0, 0, 1, 0), "constant", 2)
         kps = F.pad(kps, (0, 0, 0, pad_size_seq), "constant", 3)
 
-        pad_size_y = self.n_pad_y - (len(phrase) + 2)
-        phrase += 3
-        phrase = F.pad(phrase, (1, 0), "constant", 1) # <sos>
-        phrase = F.pad(phrase, (0, 1), "constant", 2) # <eos>
+        len_phrase = (len(phrase) + 1)
+        pad_size_y = self.n_pad_y - len_phrase
+        phrase += 2
+        phrase = F.pad(phrase, (0, 1), "constant", 1) # <eos>
         phrase = F.pad(phrase, (0, pad_size_y), "constant", 0) # padding
 
         return kps, phrase
