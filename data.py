@@ -1,8 +1,7 @@
 import os
-import glob
-import time
+import random
 import numpy as np
-import pandas as pd
+import json
 
 import torch
 import torch.nn.functional as F
@@ -16,13 +15,13 @@ def print_tensor(x, desc=""):
 
 
 class ASLDataset(Dataset):
-    def __init__(self, dirpath, split_path, n_pad_x_seq, n_pad_x_kps, n_pad_y):
+    def __init__(self, dirpath, split_path, x_len, y_len, aug=False):
         super().__init__()
         self.dirpath = dirpath
         self.split_path = split_path
-        self.n_pad_x_seq = n_pad_x_seq
-        self.n_pad_x_kps = n_pad_x_kps
-        self.n_pad_y = n_pad_y
+        self.x_len = x_len
+        self.y_len = y_len
+        self.aug = aug
 
         try:
             with open(split_path, 'r') as f:
@@ -30,7 +29,7 @@ class ASLDataset(Dataset):
             self.fnames = []
             for line in lines:
                 fname, n_frames, n_words = line.split(" ")
-                if int(n_frames) < 512 and int(n_words) < 64:
+                if int(n_frames) < self.x_len-1 and int(n_words) < self.y_len-1:
                     self.fnames.append(fname)
         except Exception as e:
             raise ValueError(f"File read fail : {self.split_path}", e)
@@ -41,29 +40,76 @@ class ASLDataset(Dataset):
     def __getitem__(self, index):
         fname = self.fnames[index]
         kps, phrase = torch.load(os.path.join(self.dirpath, fname))
-        kps = torch.concat([kps[:,469:544], kps[:,1012:1087]], dim=1)
-        pad_size_seq = self.n_pad_x_seq - (kps.size(0) + 1)
-        pad_size_kps = self.n_pad_x_kps - kps.size(1)
 
-        kps = F.pad(kps, (0, pad_size_kps), "constant", -1)
-        kps = F.pad(kps, (0, 0, 1, 0), "constant", 2)
-        kps = F.pad(kps, (0, 0, 0, pad_size_seq), "constant", 3)
+        # kps
+        x_kps = torch.cat([kps[:,469:490], kps[:,523:544]], dim=-1)
+        y_kps = torch.cat([kps[:,1012:1033], kps[:,1066:1087]], dim=-1)
 
-        len_phrase = (len(phrase) + 1)
-        pad_size_y = self.n_pad_y - len_phrase
-        phrase += 2
-        phrase = F.pad(phrase, (0, 1), "constant", 1) # <eos>
+        # Data Augmentation
+        if self.aug:
+            # Horizontal Flip
+            if random.random() < 0.5: 
+                x_kps = 1- x_kps
+            # Shift
+            x_d = random.random() * 0.5 - 0.25
+            y_d = random.random() * 0.5 - 0.25
+            x_kps += x_d
+            y_kps += y_d
+
+        x_kps[x_kps>1] = -1
+        x_kps[x_kps<0] = -1
+        y_kps[y_kps>1] = -1
+        y_kps[y_kps<0] = -1
+
+        kps = torch.concat([x_kps, y_kps], dim=1)
+
+        # if self.aug:
+        #     kps[torch.rand_like(kps)<0.1] = -1
+
+        pad_size_seq = self.x_len - kps.size(0)
+        kps = F.pad(kps, (0, 0, 0, pad_size_seq), "constant", -1) # padding
+        
+        # phrase
+        # ---------------------------------------------------------------#
+        len_phrase = (len(phrase) + 2)
+        pad_size_y = (self.y_len+1) - len_phrase
+        phrase += 3
+
+        phrase = F.pad(phrase, (1, 0), "constant", 1) # <sos>
+        phrase = F.pad(phrase, (0, 1), "constant", 2) # <eos>
         phrase = F.pad(phrase, (0, pad_size_y), "constant", 0) # padding
 
-        return kps, phrase
+        phrase_in = phrase[:-1].clone().detach()
+        phrase_out = phrase[1:].clone().detach()
+        
+        return kps, phrase_in, phrase_out
+    
+
+def get_index2word(word2index_fpath):
+    # make index2word
+    with open(word2index_fpath, 'r') as f:
+        w2i = json.load(f)
+
+    i2w = dict()
+    i2w[0] = ""
+    i2w[1] = "<sos>"
+    i2w[2] = "<eos>"
+    for k, v in w2i.items():
+        i2w[v+3] = k
+    
+    return i2w
 
 if __name__ == "__main__":
     train_dataset = ASLDataset(
             "/data/asl-fingerspelling", 
             split_path='data_info.txt',
-            n_pad_x_seq=512, 
-            n_pad_x_kps=152, 
-            n_pad_y=64
+            x_len=256, 
+            y_len=32,
+            aug=True
         )
-    a, b = train_dataset[0]
+    a, b, c = train_dataset[0]
+    print(len(train_dataset))
     
+    print_tensor(a)
+    print_tensor(b)
+    print_tensor(c)

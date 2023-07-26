@@ -14,7 +14,6 @@ from torch.utils.data import DataLoader
 
 from data import ASLDataset, get_index2word
 from utils import print_tensor, calculate_eval
-from focal_loss import FocalLoss
 
 device = 'cuda'
 
@@ -33,22 +32,24 @@ def train(
     train_loader = sample_data(train_loader)
     val_loader = sample_data(val_loader)
 
-    # criterion = FocalLoss()
-    criterion = nn.CrossEntropyLoss(ignore_index=0)
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=0)
+    criterion = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     pbar = tqdm.trange(args.steps, dynamic_ncols=True, initial=args.start_step)
     for step in pbar:
         model.train()
         kps, phrase_in, phrase_out = next(train_loader)
+        
+        # data augmentation
+        phrase_in[:phrase_in.size(0)//2, 1:] = 0
 
         kps = kps.to(device)
         phrase_in = phrase_in.to(device)
         phrase_out = phrase_out.to(device)
 
         out = model(kps, phrase_in)
-        out_ = out.permute(0, 2, 1)
 
+        out_ = out.permute(0, 2, 1)
         loss = criterion(out_, phrase_out)
 
         optimizer.zero_grad()
@@ -63,6 +64,7 @@ def train(
 
             # validation dataset
             val_kps, val_gt_in, val_gt_out = next(val_loader)
+            val_gt_in[:, 1:] = 0
             val_kps = val_kps.to(device)
             val_gt_in = val_gt_in.to(device)
             val_gt_out = val_gt_out.to(device)
@@ -161,8 +163,8 @@ if __name__ == "__main__":
     train_dataset = ASLDataset(
             "/data/asl-fingerspelling", 
             split_path='data_train_info.txt',
-            x_len=256, 
-            y_len=32,
+            x_len=512, 
+            y_len=64,
             aug=True
         )
     
@@ -177,16 +179,15 @@ if __name__ == "__main__":
     val_dataset = ASLDataset(
             "/data/asl-fingerspelling", 
             split_path='data_val_info.txt',
-            x_len=256, 
-            y_len=32,
-            aug=False
+            x_len=512, 
+            y_len=64
         )
     
     val_loader = DataLoader(
         val_dataset,
         batch_size=args.val_batch_size,
         shuffle=True,
-        num_workers=2,
+        num_workers=4,
         drop_last=True
     )
     

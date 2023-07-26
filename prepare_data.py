@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import tqdm
 import torch
+import shutil
 from multiprocessing import Pool
 
 dirpath = "/data/asl-fingerspelling"
@@ -24,7 +25,7 @@ df = df.set_index('sequence_id')
 with open(os.path.join(dirpath, 'character_to_prediction_index.json'), 'r') as f:
     ch_dict = json.load(f)
 
-def func(fname):
+def func1(fname):
     columns = [f'x_left_hand_{i}' for i in range(21)]
     columns += [f'x_right_hand_{i}' for i in range(21)]
     columns += [f'y_left_hand_{i}' for i in range(21)]
@@ -47,15 +48,28 @@ def func(fname):
         save_path = os.path.join(dirpath, f'processed/{seq_id}.pt')
         torch.save((torch_seq, torch_phrase), save_path)
 
+def func2(fname):
+    parquet_data = pd.read_parquet(fname)
+    for seq_id in list(set(parquet_data.index)):
+        src_path = os.path.join(dirpath, f'processed/{seq_id}.pt')
+        dst_path = os.path.join(dirpath, f'processed/train/{seq_id}.pt')
+        shutil.copy2(src_path, dst_path)
+
+def func3(fname):
+    parquet_data = pd.read_parquet(fname)
+    for seq_id in list(set(parquet_data.index)):
+        src_path = os.path.join(dirpath, f'processed/{seq_id}.pt')
+        dst_path = os.path.join(dirpath, f'processed/sup/{seq_id}.pt')
+        shutil.copy2(src_path, dst_path)
 
 if __name__ == "__main__":
-    
-
-    fnames = glob.glob(os.path.join(dirpath, "train_landmarks", '*'))
-    fnames += glob.glob(os.path.join(dirpath, "supplemental_landmarks", '*'))
     pool = Pool(1)
+    fnames = glob.glob(os.path.join(dirpath, "train_landmarks", '*'))
+    for i in tqdm.tqdm(pool.imap_unordered(func2, fnames), total=len(fnames)):
+        pass
 
-    for i in tqdm.tqdm(pool.imap_unordered(func, fnames), total=len(fnames)):
+    fnames += glob.glob(os.path.join(dirpath, "supplemental_landmarks", '*'))
+    for i in tqdm.tqdm(pool.imap_unordered(func3, fnames), total=len(fnames)):
         pass
     
     
