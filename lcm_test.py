@@ -24,21 +24,20 @@ def lcm_test_01():
 
     # print(parquet_data[columns].loc[1817169529])
     
+def lcm_test_02():
+    import cv2
+    import numpy as np
+
+    img1 = cv2.imread("test_04.jpg", cv2.IMREAD_COLOR)
+    img2 = cv2.imread("test_06.jpg", cv2.IMREAD_COLOR)
+    img3 = cv2.imread("test_07.jpg", cv2.IMREAD_COLOR)
+    img4 = cv2.imread("test_09.jpg", cv2.IMREAD_COLOR)
+
+    img = np.concatenate([img1, img2, img3, img4], axis=0)
+    img = cv2.resize(img, dsize=None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
+    cv2.imwrite("test.jpg", img)
 
 if __name__ == "__main__":
-    import random
-
-    with open('data_info.txt', 'r') as f:
-        lines = f.read().strip().split("\n")
+    # raise NotImplementedError
+    lcm_test_02()
     
-    random.shuffle(lines)
-
-    with open('data_train_info.txt', 'w') as f1, open('data_val_info.txt', 'w') as f2:
-        ind = int(len(lines)*0.9)
-        for line in lines[:ind]:
-            f1.write(line+"\n")
-        for line in lines[ind:]:
-            f2.write(line+"\n")
-            
-            
-            

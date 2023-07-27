@@ -38,7 +38,8 @@ class ASLModel_(nn.Module):
     def forward(self, src, tgt):
         src = self.pos_encoder(self.fc_in(src))
         tgt = self.pos_encoder(self.embedding(tgt))
-        tgt_mask = nn.Transformer.generate_square_subsequent_mask(tgt.size(1), device=tgt.device)
+        sz = tgt.size(1)
+        tgt_mask = torch.full((sz, sz), float('-inf'), device=tgt.device).fill_diagonal_(0)
         out = self.transformer(src, tgt, tgt_mask=tgt_mask)
         out = self.fc_out(out)
         return out
@@ -53,7 +54,7 @@ class ASLModel_(nn.Module):
         return out
     
 ASLModel = ASLModel_(
-    x_dim=84, y_dim=62, y_len=32, d_model=128, nhead=1, d_hid=512, nlayers=6, dropout=0.5
+    x_dim=84, y_dim=63, y_len=64, d_model=128, nhead=8, d_hid=512, nlayers=6, dropout=0.1
 )
 
 if __name__ == "__main__":
@@ -62,7 +63,7 @@ if __name__ == "__main__":
     x_len = 256
     x_dim = 84
     y_len = 32
-    y_dim = 62
+    y_dim = 63
     x = torch.randn(bs, x_len, x_dim, device='cuda')
     y = torch.randint(low=0, high=y_dim, size=(bs, y_len), device='cuda')
     

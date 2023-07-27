@@ -34,7 +34,7 @@ def train(
     val_loader = sample_data(val_loader)
 
     # criterion = FocalLoss()
-    criterion = nn.CrossEntropyLoss(ignore_index=0)
+    criterion = nn.CrossEntropyLoss(ignore_index=3)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=0)
 
     pbar = tqdm.trange(args.steps, dynamic_ncols=True, initial=args.start_step)
@@ -131,7 +131,7 @@ if __name__ == "__main__":
     argparser.add_argument("--load", default="", type=str)
     argparser.add_argument("--start_step", default=0, type=int)
     argparser.add_argument("--steps", default=2000000, type=int)
-    argparser.add_argument("--val_step", default=1, type=int)
+    argparser.add_argument("--val_step", default=10, type=int)
     argparser.add_argument("--save_step", default=1000, type=int)
     argparser.add_argument("--word2index", default="/data/asl-fingerspelling/character_to_prediction_index.json", type=str)
     argparser.add_argument("--wandb", action="store_true")
@@ -161,8 +161,8 @@ if __name__ == "__main__":
     train_dataset = ASLDataset(
             "/data/asl-fingerspelling", 
             split_path='data_train_info.txt',
-            x_len=256, 
-            y_len=32,
+            x_len=512, 
+            y_len=64,
             aug=True
         )
     
@@ -177,8 +177,8 @@ if __name__ == "__main__":
     val_dataset = ASLDataset(
             "/data/asl-fingerspelling", 
             split_path='data_val_info.txt',
-            x_len=256, 
-            y_len=32,
+            x_len=512, 
+            y_len=64,
             aug=False
         )
     

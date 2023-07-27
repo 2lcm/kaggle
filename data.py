@@ -73,7 +73,13 @@ class ASLDataset(Dataset):
         # ---------------------------------------------------------------#
         len_phrase = (len(phrase) + 2)
         pad_size_y = (self.y_len+1) - len_phrase
-        phrase += 3
+        phrase += 4
+
+        if self.aug:
+            cnt = int(len(phrase) * 0.1)
+            for i in range(cnt):
+                unknown_idx = random.randint(0, len(phrase)-1)
+                phrase[unknown_idx] = 3 # <unknown>
 
         phrase = F.pad(phrase, (1, 0), "constant", 1) # <sos>
         phrase = F.pad(phrase, (0, 1), "constant", 2) # <eos>
@@ -94,8 +100,9 @@ def get_index2word(word2index_fpath):
     i2w[0] = ""
     i2w[1] = "<sos>"
     i2w[2] = "<eos>"
+    i2w[3] = "<unknown>"
     for k, v in w2i.items():
-        i2w[v+3] = k
+        i2w[v+4] = k
     
     return i2w
 
@@ -103,8 +110,8 @@ if __name__ == "__main__":
     train_dataset = ASLDataset(
             "/data/asl-fingerspelling", 
             split_path='data_info.txt',
-            x_len=256, 
-            y_len=32,
+            x_len=512, 
+            y_len=64,
             aug=True
         )
     a, b, c = train_dataset[0]
